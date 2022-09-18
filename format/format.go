@@ -1,11 +1,15 @@
-package main
+package format
 
 import (
 	"fmt"
 	"io"
 	"log"
 	"sort"
+
+	"github.com/haplesspanda/fe8savereader/parse"
 )
+
+type Unit = parse.Unit
 
 type UnitDiff struct {
 	New      bool
@@ -26,14 +30,14 @@ type UnitDiff struct {
 }
 
 func Read(file io.ReadSeeker, output io.StringWriter) {
-	saveData := ParseSave(file)
+	saveData := parse.ParseSave(file)
 	for _, unit := range saveData.Units {
-		PrintUnit(unit, output)
+		printUnit(unit, output)
 	}
 }
 
 func Diff(oldFile io.ReadSeeker, newFile io.ReadSeeker, output io.StringWriter) {
-	oldUnits := ParseSave(oldFile).Units
+	oldUnits := parse.ParseSave(oldFile).Units
 	oldUnitMap := make(map[int]Unit)
 	for _, unit := range oldUnits {
 		oldUnitMap[unit.CharIndex] = unit
@@ -41,12 +45,12 @@ func Diff(oldFile io.ReadSeeker, newFile io.ReadSeeker, output io.StringWriter) 
 
 	log.Printf("=== OLD UNITS ===")
 	for _, unit := range oldUnits {
-		PrintUnit(unit, nil)
+		printUnit(unit, nil)
 	}
 	log.Println()
 	log.Println()
 
-	newUnits := ParseSave(newFile).Units
+	newUnits := parse.ParseSave(newFile).Units
 	newUnitMap := make(map[int]Unit)
 	for _, unit := range newUnits {
 		newUnitMap[unit.CharIndex] = unit
@@ -54,7 +58,7 @@ func Diff(oldFile io.ReadSeeker, newFile io.ReadSeeker, output io.StringWriter) 
 
 	log.Printf("=== NEW UNITS ===")
 	for _, unit := range newUnits {
-		PrintUnit(unit, nil)
+		printUnit(unit, nil)
 	}
 	log.Println()
 	log.Println()
@@ -98,27 +102,27 @@ func Diff(oldFile io.ReadSeeker, newFile io.ReadSeeker, output io.StringWriter) 
 		}
 
 		if !oldUnit.Dead {
-			PrintUnitWithDiff(newUnit, diff, output)
+			printUnitWithDiff(newUnit, diff, output)
 		}
 	}
 }
 
-func PrintUnit(unit Unit, output io.StringWriter) {
+func printUnit(unit Unit, output io.StringWriter) {
 	var statusString string
 	if unit.Dead {
 		statusString = ", DEAD"
 	}
-	WriteLine(output, "")
-	WriteLine(output, fmt.Sprintf("%s, %s, Level %d EXP %d%s", unit.CharName, unit.ClassName, unit.Level, unit.Exp, statusString))
-	WriteLine(output, fmt.Sprintf("HP %d Pow %d Skl %d Spd %d Lck %d Def %d Res %d", unit.MaxHp, unit.Pow, unit.Skl, unit.Spd, unit.Lck, unit.Def, unit.Res))
+	writeLine(output, "")
+	writeLine(output, fmt.Sprintf("%s, %s, Level %d EXP %d%s", unit.CharName, unit.ClassName, unit.Level, unit.Exp, statusString))
+	writeLine(output, fmt.Sprintf("HP %d Pow %d Skl %d Spd %d Lck %d Def %d Res %d", unit.MaxHp, unit.Pow, unit.Skl, unit.Spd, unit.Lck, unit.Def, unit.Res))
 }
 
-func PrintUnitWithDiff(unit Unit, diff UnitDiff, output io.StringWriter) {
+func printUnitWithDiff(unit Unit, diff UnitDiff, output io.StringWriter) {
 	if !diff.Promoted && !diff.Died && !diff.New && diff.TotalExpDiff == 0 && diff.LevelDiff == 0 && diff.HpBonus == 0 && diff.PowBonus == 0 && diff.SklBonus == 0 && diff.SpdBonus == 0 && diff.LckBonus == 0 && diff.DefBonus == 0 && diff.ResBonus == 0 {
 		return
 	}
 
-	WriteLine(output, "")
+	writeLine(output, "")
 	defer log.Printf("Wrote unit")
 
 	var statusString string
@@ -136,26 +140,26 @@ func PrintUnitWithDiff(unit Unit, diff UnitDiff, output io.StringWriter) {
 		if diff.TotalExpDiff > 0 {
 			totalExpBonus = fmt.Sprintf(" **(+%d Total XP)**", diff.TotalExpDiff)
 		}
-		levelString = fmt.Sprintf(", Level %d%s EXP %d%s", unit.Level, FormatBonus(diff.LevelDiff), unit.Exp, totalExpBonus)
+		levelString = fmt.Sprintf(", Level %d%s EXP %d%s", unit.Level, formatBonus(diff.LevelDiff), unit.Exp, totalExpBonus)
 	}
 
-	WriteLine(output, fmt.Sprintf("**%s**, %s%s%s", unit.CharName, unit.ClassName, levelString, statusString))
+	writeLine(output, fmt.Sprintf("**%s**, %s%s%s", unit.CharName, unit.ClassName, levelString, statusString))
 
 	if diff.Died {
 		return
 	}
 
-	WriteLine(output, fmt.Sprintf("HP %d%s Pow %d%s Skl %d%s Spd %d%s Lck %d%s Def %d%s Res %d%s",
-		unit.MaxHp, FormatBonus(diff.HpBonus),
-		unit.Pow, FormatBonus(diff.PowBonus),
-		unit.Skl, FormatBonus(diff.SklBonus),
-		unit.Spd, FormatBonus(diff.SpdBonus),
-		unit.Lck, FormatBonus(diff.LckBonus),
-		unit.Def, FormatBonus(diff.DefBonus),
-		unit.Res, FormatBonus(diff.ResBonus)))
+	writeLine(output, fmt.Sprintf("HP %d%s Pow %d%s Skl %d%s Spd %d%s Lck %d%s Def %d%s Res %d%s",
+		unit.MaxHp, formatBonus(diff.HpBonus),
+		unit.Pow, formatBonus(diff.PowBonus),
+		unit.Skl, formatBonus(diff.SklBonus),
+		unit.Spd, formatBonus(diff.SpdBonus),
+		unit.Lck, formatBonus(diff.LckBonus),
+		unit.Def, formatBonus(diff.DefBonus),
+		unit.Res, formatBonus(diff.ResBonus)))
 }
 
-func FormatBonus(bonus int) string {
+func formatBonus(bonus int) string {
 	var result string
 	if bonus > 0 {
 		result = fmt.Sprintf(" **(+%d)**", bonus)
@@ -163,7 +167,7 @@ func FormatBonus(bonus int) string {
 	return result
 }
 
-func WriteLine(output io.StringWriter, str string) {
+func writeLine(output io.StringWriter, str string) {
 	if output != nil {
 		_, err := output.WriteString(str + "\n")
 		if err != nil {

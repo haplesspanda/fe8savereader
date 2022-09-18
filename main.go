@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"log"
 	"os"
+
+	"github.com/haplesspanda/fe8savereader/format"
 )
 
 func main() {
@@ -35,7 +37,7 @@ func main() {
 		}
 		defer output.Close()
 
-		Read(f, output)
+		format.Read(f, output)
 	} else if os.Args[1] == "compare" {
 		if len(os.Args) < 5 {
 			log.Println("Missing compare args, exiting")
@@ -68,7 +70,7 @@ func main() {
 
 		writer := bufio.NewWriter(output)
 
-		Diff(oldF, newF, writer)
+		format.Diff(oldF, newF, writer)
 
 		err = writer.Flush()
 		if err != nil {
