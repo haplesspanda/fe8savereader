@@ -10,6 +10,7 @@ import (
 )
 
 type Unit = parse.Unit
+type Chapter = parse.Chapter
 
 type UnitDiff struct {
 	New      bool
@@ -31,37 +32,71 @@ type UnitDiff struct {
 
 func Read(file io.ReadSeeker, output io.StringWriter) {
 	saveData := parse.ParseSave(file)
+	writeLine(output, fmt.Sprintf("Route: %s", saveData.Route))
+	writeLine(output, fmt.Sprintf("Total turns: %d", saveData.TotalTurns))
+	writeLine(output, "")
+
+	for _, chapter := range saveData.Chapters {
+		printChapter(chapter, output)
+	}
+
 	for _, unit := range saveData.Units {
 		printUnit(unit, output)
 	}
 }
 
 func Diff(oldFile io.ReadSeeker, newFile io.ReadSeeker, output io.StringWriter) {
-	oldUnits := parse.ParseSave(oldFile).Units
+	oldSave := parse.ParseSave(oldFile)
+	oldUnits := oldSave.Units
 	oldUnitMap := make(map[int]Unit)
 	for _, unit := range oldUnits {
 		oldUnitMap[unit.CharIndex] = unit
 	}
 
-	log.Printf("=== OLD UNITS ===")
+	log.Printf("=== OLD FILE ===")
+	for _, chapter := range oldSave.Chapters {
+		printChapter(chapter, nil)
+	}
 	for _, unit := range oldUnits {
 		printUnit(unit, nil)
 	}
 	log.Println()
 	log.Println()
 
-	newUnits := parse.ParseSave(newFile).Units
+	newSave := parse.ParseSave(newFile)
+	newUnits := newSave.Units
 	newUnitMap := make(map[int]Unit)
 	for _, unit := range newUnits {
 		newUnitMap[unit.CharIndex] = unit
 	}
 
-	log.Printf("=== NEW UNITS ===")
+	log.Printf("=== NEW FILE ===")
+	for _, chapter := range newSave.Chapters {
+		printChapter(chapter, nil)
+	}
 	for _, unit := range newUnits {
 		printUnit(unit, nil)
 	}
 	log.Println()
 	log.Println()
+
+	// Chapter comparison relies on the fact that chapters are only ever added to, and in order.
+	chapterCountDiff := len(newSave.Chapters) - len(oldSave.Chapters)
+	if chapterCountDiff < 0 {
+		writeLine(output, "Error: Found more completed chapters in old file than new file")
+		return
+	}
+
+	writeLine(output, fmt.Sprintf("**Route:** %s", newSave.Route))
+
+	if chapterCountDiff > 0 {
+		writeLine(output, fmt.Sprintf("**Total turns:** %d%s", newSave.TotalTurns, formatBonus(newSave.TotalTurns-oldSave.TotalTurns)))
+		newChapters := newSave.Chapters[len(oldSave.Chapters):]
+		writeLine(output, "**Chapters completed:**")
+		for _, chapter := range newChapters {
+			printChapter(chapter, output)
+		}
+	}
 
 	// Sort into stable order (by character index)
 	newKeys := make([]int, 0)
@@ -176,4 +211,8 @@ func writeLine(output io.StringWriter, str string) {
 	}
 
 	log.Println(str)
+}
+
+func printChapter(chapter Chapter, output io.StringWriter) {
+	writeLine(output, fmt.Sprintf("%s in %d turns", chapter.ChapterName, chapter.TurnCount))
 }

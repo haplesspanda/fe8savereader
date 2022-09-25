@@ -183,8 +183,58 @@ var classNames = []string{"(Unused))",
 	"Pupil (2)",
 }
 
+type ChapterData struct {
+	Name  string
+	Route string
+}
+
+var chapterData = map[int]ChapterData{
+	0x00: {Name: "Prologue: The Fall of Renais", Route: "None"},
+	0x01: {Name: "Ch.1: Escape!", Route: "None"},
+	0x02: {Name: "Ch.2: The Protected", Route: "None"},
+	0x03: {Name: "Ch.3: The Bandits of Borgo", Route: "None"},
+	0x04: {Name: "Ch.4: Ancient Horrors", Route: "None"},
+	0x05: {Name: "Ch.5x: Unbroken Heart", Route: "None"},
+	0x06: {Name: "Ch.5: The Empire's Reach", Route: "None"},
+	0x07: {Name: "Ch.6: Victims of War", Route: "None"},
+	0x08: {Name: "Ch.7: Waterside Renvall", Route: "None"},
+	0x09: {Name: "Ch.8: It's a Trap!", Route: "None"},
+	0x0A: {Name: "Ch.9: Distant Blade", Route: "Eirika"},
+	0x0B: {Name: "Ch.10: Revolt at Carcino", Route: "Eirika"},
+	0x0C: {Name: "Ch.12: Village of Silence", Route: "Eirika"},
+	0x0D: {Name: "Ch.13: Hamill Canyon", Route: "Eirika"},
+	0x0E: {Name: "Ch.14: Queen of White Dunes", Route: "Eirika"},
+	0x0F: {Name: "Ch.15: Scorched Sand", Route: "Eirika"},
+	0x10: {Name: "Ch.16: Ruled by Madness", Route: "Eirika"},
+	0x11: {Name: "Ch.17: River of Regrets", Route: "Eirika"},
+	0x12: {Name: "Ch.18: Two Faces of Evil", Route: "Eirika"},
+	0x13: {Name: "Ch.19: Last Hope", Route: "Eirika"},
+	0x14: {Name: "Ch.20: Darkling Woods", Route: "Eirika"},
+	0x15: {Name: "Final Chapter: Sacred Stone (Part 1)", Route: "Eirika"}, // Unused?
+	0x16: {Name: "Final Chapter: Sacred Stone", Route: "Eirika"},
+	0x17: {Name: "Ch.9: Fort Rigwald", Route: "Ephraim"},
+	0x18: {Name: "Ch.10: Turning Traitor", Route: "Ephraim"},
+	0x19: {Name: "Ch.12: Landing at Taizel", Route: "Ephraim"},
+	0x1A: {Name: "Ch.13: Fluorspar's Oath", Route: "Ephraim"},
+	0x1B: {Name: "Ch.14: Father and Son", Route: "Ephraim"},
+	0x1C: {Name: "Ch.15: Scorched Sand", Route: "Ephraim"},
+	0x1D: {Name: "Ch.16: Ruled by Madness", Route: "Ephraim"},
+	0x1E: {Name: "Ch.17: River of Regrets", Route: "Ephraim"},
+	0x1F: {Name: "Ch.18: Two Faces of Evil", Route: "Ephraim"},
+	0x20: {Name: "Ch.19: Last Hope", Route: "Ephraim"},
+	0x21: {Name: "Ch.20: Darkling Woods", Route: "Ephraim"},
+	0x22: {Name: "Final Chapter: Sacred Stone (Part 1)", Route: "Ephraim"}, // Unused?
+	0x23: {Name: "Final Chapter: Sacred Stone", Route: "Ephraim"},
+	0x3D: {Name: "Ch.11: Creeping Darkness", Route: "Eirika"},
+	0x3E: {Name: "Ch.11: Phantom Ship", Route: "Ephraim"},
+}
+
 type SaveData struct {
-	Units []Unit
+	Units    []Unit
+	Chapters []Chapter
+
+	Route      string
+	TotalTurns int
 }
 
 type Unit struct {
@@ -208,6 +258,15 @@ type Unit struct {
 	// Fields inferred from ROM data.
 	CharName  string
 	ClassName string
+}
+
+type Chapter struct {
+	ChapterId int
+	TurnCount int
+	Time      int
+
+	// Fields inferred from ROM data.
+	ChapterName string
 }
 
 func ParseSave(f io.ReadSeeker) SaveData {
@@ -266,7 +325,57 @@ func ParseSave(f io.ReadSeeker) SaveData {
 			returnedUnits = append(returnedUnits, unit)
 		}
 	}
+
+	chapterOffset := 0xCAC
+	chapterSectionLength := 0xC0
+
+	chapters := make([]Chapter, 0)
+	offset, err = f.Seek(int64(saveStart+chapterOffset), io.SeekStart)
+	if err != nil {
+		panic(err)
+	}
+
+	route := "None"
+	totalTurns := 0
+
+	for i := 0; offset < int64(saveStart+chapterOffset+chapterSectionLength); i++ {
+		chapter := Chapter{}
+		buf := make([]byte, 4)
+		n, err := f.Read(buf[:cap(buf)])
+		buf = buf[:n]
+		if err != nil {
+			panic(err)
+		}
+
+		chapter.ChapterId = int(buf[0] & 0x7f)
+		chapter.TurnCount = int(buf[0]&0x80>>7 + buf[1]<<1)
+		// TODO: Not sure about byte ordering here
+		// chapter.Time = int(buf[2]) * 256 + int(buf[3])
+
+		if chapter.TurnCount != 0 {
+			entry, exists := chapterData[chapter.ChapterId]
+			if exists {
+				chapter.ChapterName = entry.Name
+				if entry.Route != "None" {
+					route = entry.Route
+				}
+			} else {
+				chapter.ChapterName = "Unknown chapter"
+			}
+			chapters = append(chapters, chapter)
+			totalTurns += chapter.TurnCount
+		}
+
+		offset, err = f.Seek(0, os.SEEK_CUR)
+		if err != nil {
+			panic(err)
+		}
+	}
+
 	return SaveData{
-		Units: returnedUnits,
+		Units:      returnedUnits,
+		Chapters:   chapters,
+		Route:      route,
+		TotalTurns: totalTurns,
 	}
 }
